@@ -1,7 +1,9 @@
-package com.example.stock.service;
+package com.example.stock.facade;
 
 import com.example.stock.domain.Stock;
 import com.example.stock.repository.StockRepository;
+import com.example.stock.service.PessimisticLockStockService;
+import com.example.stock.service.StockService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,9 +17,12 @@ import java.util.concurrent.Executors;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @SpringBootTest
-public class StockServiceTest {
+public class PessimisticStockServiceTest {
     @Autowired
     private StockService stockService;
+
+    @Autowired
+    private PessimisticLockStockService pessimisticLockStockService;
 
     @Autowired
     private StockRepository stockRepository;
@@ -47,8 +52,7 @@ public class StockServiceTest {
     }
 
     @Test
-    public void 동시에_100개_요청() throws InterruptedException {
-        // multi thread
+    public void 비관적_락_동시에_100개_요청() throws InterruptedException {
         int threadCount = 100;
         ExecutorService executorService = Executors.newFixedThreadPool(32);
         CountDownLatch latch = new CountDownLatch(threadCount);
@@ -56,7 +60,7 @@ public class StockServiceTest {
         for(int i = 0; i < threadCount; i++) {
             executorService.submit(() -> {
                 try {
-                    stockService.decrease(1L, 1L);
+                    pessimisticLockStockService.decrease(1L, 1L);
                 } finally {
                     latch.countDown();
                 }
@@ -65,13 +69,6 @@ public class StockServiceTest {
 
         latch.await();
         Stock stock = stockRepository.findById(1L).orElseThrow();
-
-        /**
-         * 레이스 컨디션 문제 발생
-         * -> 두 개 이상의 스레스가 공유 데이터에 병렬적으로 접근할 때 발생하는 문제
-         * -> 스레드가 순차적으로 데이터에 접근하도록 해야 방지 가능
-         * -> 데이터에 한 개의 스레드만 접근 가능하도록 해야 함
-         */
         assertEquals(0L, stock.getQuantity());
     }
 }
